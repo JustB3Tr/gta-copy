@@ -44,9 +44,15 @@ jobs:
           python-version: "3.12"
       - name: Install deps
         run: pip install -r requirements.txt pyinstaller
+      - name: Drop x86_64-only optional panda3d module (arm64 mac)
+        if: runner.os == 'macOS'
+        run: >
+          python -c "import panda3d, glob, os;
+          [os.remove(f) for f in glob.glob(os.path.join(os.path.dirname(panda3d.__file__), 'rocket*'))]"
       - name: Build executable
         run: >
           pyinstaller ${{ matrix.flags }} --name AngelCity
+          --exclude-module panda3d.rocket
           --collect-all panda3d main.py
       - uses: actions/upload-artifact@v4
         with:
