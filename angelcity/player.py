@@ -169,7 +169,8 @@ class Player:
                 self.fire_cd = w["rof"]
             elif ammo and ammo > 0:
                 self.fire_cd = w["rof"]
-                self.weapons[self.current] = ammo - w["pellets"] if False else ammo - 1
+                # one round per trigger pull; a shotgun shell covers all its pellets
+                self.weapons[self.current] = ammo - 1
                 ox = self.x - math.sin(self.heading) * 0.4
                 oy = self.y + math.cos(self.heading) * 0.4
                 oz = self.z + 1.35

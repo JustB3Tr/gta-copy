@@ -1,5 +1,6 @@
 """Headless smoke test: boots the whole game world and runs 60 frames offscreen.
-Run directly (python tests/test_smoke.py) or via pytest."""
+Run directly: python tests/test_smoke.py (no extra dependencies; also discoverable
+by pytest if you happen to have it installed)."""
 
 import os
 import subprocess

@@ -842,6 +842,7 @@ class Aircraft:
         self.driver = None
         self.wreck = False
         self.rotor_spin = 0.0
+        self._last_sync_t = None
         self.sync(0)
 
     @property
@@ -1041,7 +1042,9 @@ class Aircraft:
         self.np.setR(math.degrees(-self.roll * 0.7))
         active = (self.driver == "player" or not self.grounded) and not self.wreck
         rpm = 1200 if active else 0
-        self.rotor_spin += rpm * (0.016 if t else 0.016)
+        dt = 0.0 if self._last_sync_t is None else max(0.0, min(0.1, t - self._last_sync_t))
+        self._last_sync_t = t
+        self.rotor_spin += rpm * dt
         if self.rotor and not self.rotor.isEmpty():
             self.rotor.setH(self.rotor_spin % 360)
         if self.rotor2 and not self.rotor2.isEmpty():
