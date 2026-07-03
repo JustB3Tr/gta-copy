@@ -23,6 +23,9 @@ class Ped:
         self.phase = 0.0
         self.hp = 30.0
         self.down = False
+        self.flung = False
+        self.fvx = self.fvy = self.fvz = 0.0
+        self.spin = 0.0
         self.fade = 0.0
         self.state = "walk"
         self.state_t = rng.uniform(2, 8)
@@ -59,8 +62,14 @@ class Ped:
     def hit_by_car(self, car):
         v = car.vel_mag
         if v > 3.5:
+            # ballistic fling: inherit the car's velocity plus an upward kick
             self.hp = 0
-            self.go_down()
+            self.flung = True
+            self.fvx = car.vx * 0.85
+            self.fvy = car.vy * 0.85
+            self.fvz = min(8.0, 2.0 + v * 0.35)
+            self.spin = random.uniform(300, 560) * random.choice((-1, 1))
+            self.game.sfx.play("thud", 0.8)
             if car.driver == "player":
                 self.game.cops.add_heat(0.75)
         else:
@@ -76,6 +85,21 @@ class Ped:
 
     def update(self, dt):
         game = self.game
+        if self.flung:
+            self.fvz -= 18.0 * dt
+            self.x += self.fvx * dt
+            self.y += self.fvy * dt
+            self.z += self.fvz * dt
+            gz = game.ground.surface(self.x, self.y, self.z)[0]
+            self.rig.root.setPos(self.x, self.y, max(self.z, gz))
+            self.rig.root.setP(self.rig.root.getP() + self.spin * dt)
+            self.fvx *= max(0.0, 1 - 0.4 * dt)
+            self.fvy *= max(0.0, 1 - 0.4 * dt)
+            if self.z <= gz:
+                self.z = gz
+                self.flung = False
+                self.go_down()
+            return True
         if self.down:
             self.fade -= dt
             if self.fade < 1.5:

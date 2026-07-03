@@ -202,11 +202,86 @@ class Pickup:
 # ---------------------------------------------------------------- visual fx
 
 class FXPool:
-    """Short-lived tracers / impact puffs / explosion flashes."""
+    """Short-lived tracers / impact puffs / explosion flashes, plus persistent
+    fading skid marks and water effects."""
+
+    SKID_TTL = 16.0
+    MAX_SKIDS = 260
 
     def __init__(self, game):
         self.game = game
         self.items = []   # (np, ttl, grow)
+        self.skids = []   # (np, ttl)
+        self._skid_gap = 0.0
+
+    def skid_mark(self, x, y, z, heading):
+        # distance-gate so marks form a dashed trail rather than a solid smear
+        if self.skids:
+            last = self.skids[-1][0]
+            if (last.getX() - x) ** 2 + (last.getY() - y) ** 2 < 0.55:
+                return
+        b = MeshBuilder("skid")
+        b.add_rect(-0.14, -0.65, 0.14, 0.65, 0.0, (0.05, 0.05, 0.06, 0.55))
+        np = b.build(self.game.render)
+        np.setPos(x, y, z + 0.06)
+        np.setH(math.degrees(heading))
+        np.setTransparency(True)
+        np.setDepthWrite(False)
+        self.skids.append([np, self.SKID_TTL])
+        if len(self.skids) > self.MAX_SKIDS:
+            old = self.skids.pop(0)
+            old[0].removeNode()
+
+    def dust(self, x, y, z, color):
+        b = MeshBuilder("dust")
+        b.add_box(0, 0, 0, 0.5, 0.5, 0.4, color)
+        np = b.build(self.game.render)
+        np.setPos(x, y, z)
+        np.setLightOff()
+        np.setTransparency(True)
+        self.items.append([np, 0.7, 2.6])
+
+    def wake(self, x, y, small=False):
+        b = MeshBuilder("wake")
+        s = 0.6 if small else 1.1
+        b.add_rect(-s, -s * 0.7, s, s * 0.7, 0.0, (0.95, 0.98, 0.97, 0.5))
+        np = b.build(self.game.render)
+        from . import config as _C
+        np.setPos(x, y, _C.WATER_Z + 0.08)
+        np.setLightOff()
+        np.setTransparency(True)
+        np.setDepthWrite(False)
+        self.items.append([np, 1.1, 1.8])
+
+    def ripple(self, x, y):
+        b = MeshBuilder("ripple")
+        for k in range(8):
+            a0 = math.tau * k / 8
+            a1 = math.tau * (k + 1) / 8
+            r0, r1 = 0.85, 1.0
+            b.add_quad((math.cos(a0) * r0, math.sin(a0) * r0, 0),
+                       (math.cos(a0) * r1, math.sin(a0) * r1, 0),
+                       (math.cos(a1) * r1, math.sin(a1) * r1, 0),
+                       (math.cos(a1) * r0, math.sin(a1) * r0, 0),
+                       (0.95, 0.98, 0.97, 0.55), (0, 0, 1))
+        np = b.build(self.game.render)
+        from . import config as _C
+        np.setPos(x, y, _C.WATER_Z + 0.1)
+        np.setLightOff()
+        np.setTransparency(True)
+        np.setDepthWrite(False)
+        self.items.append([np, 1.0, 3.2])
+
+    def splash(self, x, y):
+        b = MeshBuilder("splash")
+        b.add_dome(0, 0, 0, 1.0, (0.92, 0.96, 0.97, 0.75), sides=8, rings=2)
+        np = b.build(self.game.render)
+        from . import config as _C
+        np.setPos(x, y, _C.WATER_Z)
+        np.setLightOff()
+        np.setTransparency(True)
+        self.items.append([np, 0.5, 5.0])
+        self.ripple(x, y)
 
     def tracer(self, a, b):
         segs = LineSegs()
@@ -256,6 +331,15 @@ class FXPool:
         self.items.append([np, 0.9, 2.0])
 
     def update(self, dt):
+        keep_s = []
+        for sk in self.skids:
+            sk[1] -= dt
+            if sk[1] <= 0:
+                sk[0].removeNode()
+                continue
+            sk[0].setAlphaScale(min(1.0, sk[1] / (self.SKID_TTL * 0.5)))
+            keep_s.append(sk)
+        self.skids = keep_s
         keep = []
         for it in self.items:
             it[1] -= dt

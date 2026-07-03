@@ -35,6 +35,10 @@ PALETTES = {
 GLASS = (0.16, 0.22, 0.28)
 TIRE = (0.10, 0.10, 0.11)
 
+# relative masses for collision impulse distribution
+MASS = {"sedan": 1.0, "coupe": 0.9, "lowrider": 1.15, "pickup": 1.35, "van": 1.4,
+        "taxi": 1.0, "police": 1.15, "beater": 0.95}
+
 _protos = {}
 
 
@@ -180,8 +184,14 @@ class Car:
         self.airborne = False
         self.hp = float(self.spec["hp"])
         self.driver = driver            # None | "player" | "ai" | "cop"
+        self.mass = MASS.get(kind, 1.0)
         self.wheel_spin = 0.0
         self.steer_vis = 0.0
+        self.lean_roll = 0.0            # visual weight transfer
+        self.lean_pitch = 0.0
+        self._throttle = 0.0
+        self._handbrake = False
+        self._fx_t = 0.0
         self.stuck_t = 0.0
         self.smoke_t = 0.0
         self.wreck = False
@@ -241,6 +251,12 @@ class Car:
 
         self.steer_vis += (steer * 30 - self.steer_vis) * min(1, 10 * dt)
         self.wheel_spin += self.speed * dt / 0.34 * 57.3
+        # weight transfer: roll with lateral (centripetal) accel, pitch with thrust/brake
+        lat_a = yaw * self.speed
+        self.lean_roll += (max(-7.0, min(7.0, lat_a * 0.55)) - self.lean_roll) * min(1, 6 * dt)
+        self.lean_pitch += (max(-4.5, min(5.5, -a * 0.38)) - self.lean_pitch) * min(1, 5 * dt)
+        self._throttle = throttle
+        self._handbrake = handbrake
         if not self.brake_np.isEmpty():
             braking = throttle < 0 or handbrake
             self.brake_np.setColorScale((3, 0.6, 0.6, 1) if braking else (1, 1, 1, 1))
@@ -314,19 +330,22 @@ class Car:
                 if d2 < r * r and d2 > 0.0001:
                     d = math.sqrt(d2)
                     ux, uy = dx / d, dy / d
-                    push = (r - d) * 0.5
-                    self.x += ux * push
-                    self.y += uy * push
-                    other.x -= ux * push
-                    other.y -= uy * push
+                    m1 = self.mass
+                    m2 = getattr(other, "mass", 1.0)
+                    w1, w2 = m2 / (m1 + m2), m1 / (m1 + m2)
+                    push = (r - d)
+                    self.x += ux * push * w1
+                    self.y += uy * push * w1
+                    other.x -= ux * push * w2
+                    other.y -= uy * push * w2
                     rvx, rvy = self.vx - other.vx, self.vy - other.vy
                     vn = rvx * ux + rvy * uy
                     if vn < 0:
-                        imp = -vn * 0.6
-                        self.vx += ux * imp
-                        self.vy += uy * imp
-                        other.vx -= ux * imp
-                        other.vy -= uy * imp
+                        imp = -vn * 1.2
+                        self.vx += ux * imp * w1
+                        self.vy += uy * imp * w1
+                        other.vx -= ux * imp * w2
+                        other.vy -= uy * imp * w2
                         if -vn > 4:
                             self.damage(-vn * 1.2)
                             other.damage(-vn * 1.2)
@@ -365,13 +384,38 @@ class Car:
             zb, _ = g.surface(self.x - fx * hl, self.y - fy * hl, self.z)
             zr, _ = g.surface(self.x + rx * hw, self.y + ry * hw, self.z)
             zl, _ = g.surface(self.x - rx * hw, self.y - ry * hw, self.z)
-            self.np.setP(math.degrees(math.atan2(zf - zb, 2 * hl)))
-            self.np.setR(math.degrees(math.atan2(zl - zr, 2 * hw)))
+            self.np.setP(math.degrees(math.atan2(zf - zb, 2 * hl)) + self.lean_pitch)
+            self.np.setR(math.degrees(math.atan2(zl - zr, 2 * hw)) + self.lean_roll)
         for n, w in self.wheels.items():
             if w and not w.isEmpty():
                 w.setP(-self.wheel_spin % 360)
                 if n in ("wheel_fl", "wheel_fr"):
                     w.setH(self.steer_vis)
+
+    def emit_driving_fx(self, dt):
+        """Skid marks, exhaust and off-road dust for the actively driven car."""
+        game = self.game
+        fx, fy = self.fwd
+        lat_v = -self.vx * fy + self.vy * fx
+        skidding = (self._handbrake and abs(self.speed) > 6) or abs(lat_v) > 5.5
+        self._fx_t -= dt
+        if skidding and not self.airborne:
+            rx, ry = fy, -fx
+            for side in (-1, 1):
+                wx = self.x - fx * self.spec["l"] * 0.34 + rx * side * (self.spec["w"] / 2 - 0.2)
+                wy = self.y - fy * self.spec["l"] * 0.34 + ry * side * (self.spec["w"] / 2 - 0.2)
+                game.fx.skid_mark(wx, wy, self.z, self.heading)
+        if self._fx_t <= 0:
+            mat = game.city._terrain_mat(self.x, self.y)
+            if mat in ("sand", "grass") and self.vel_mag > 8 and not self.airborne:
+                col = (0.75, 0.68, 0.5, 0.55) if mat == "sand" else (0.5, 0.55, 0.4, 0.5)
+                game.fx.dust(self.x - fx * 2, self.y - fy * 2, self.z + 0.3, col)
+                self._fx_t = 0.1
+            elif self._throttle > 0.3 and abs(self.speed) < self.spec["top"] * 0.45:
+                game.fx.dust(self.x - fx * self.spec["l"] * 0.52,
+                             self.y - fy * self.spec["l"] * 0.52, self.z + 0.35,
+                             (0.35, 0.35, 0.38, 0.35))
+                self._fx_t = 0.16
 
     def set_headlights(self, on):
         if self.head_np.isEmpty():
@@ -793,6 +837,16 @@ class Boat:
                 self.y = cy + dy / d * r
                 self.speed *= 0.3
         self.steer_vis += (steer * 10 - self.steer_vis) * min(1, 8 * dt)
+        self._fx_t = getattr(self, "_fx_t", 0.0) - dt
+        if self._fx_t <= 0 and abs(self.speed) > 4:
+            fx2, fy2 = self.fwd
+            self.game.fx.wake(self.x - fx2 * 2.6, self.y - fy2 * 2.6)
+            if abs(self.speed) > 12:
+                rx, ry = fy2, -fx2
+                for side in (-1, 1):
+                    self.game.fx.wake(self.x + fx2 * 2 + rx * side * 1.4,
+                                      self.y + fy2 * 2 + ry * side * 1.4, small=True)
+            self._fx_t = 0.10
 
     def update_idle(self, dt):
         self.speed *= max(0.0, 1 - 0.5 * dt)
@@ -952,11 +1006,14 @@ class Aircraft:
         self.speed += throttle * spec["accel"] * dt
         self.speed -= self.speed * 0.045 * dt
         self.speed = max(0.0, min(spec["top"], self.speed))
-        old = self.heading
-        self.heading = self._chase(self.heading, cam_yaw,
-                                   0.55 if self.sub == "prop" else 0.42, dt)
+        # coordinated turn: the yaw error commands a bank angle, and the bank
+        # produces the physically matching turn rate (g*tan(bank)/V)
         derr = (cam_yaw - self.heading + math.pi) % math.tau - math.pi
-        self.roll = max(-1.0, min(1.0, derr * 1.6))
+        max_bank = 0.75 if self.sub == "prop" else 0.62
+        want_bank = max(-max_bank, min(max_bank, derr * 1.8))
+        self.roll += (want_bank - self.roll) * min(1, 2.6 * dt)
+        yaw_rate = 9.81 * math.tan(self.roll) / max(self.speed, 14.0)
+        self.heading += yaw_rate * dt
         want_pitch = max(-0.5, min(0.6, cam_pitch))
         self.pitch += max(-0.9 * dt, min(0.9 * dt, want_pitch - self.pitch))
         sink = max(0.0, (spec["stall"] - self.speed)) * 0.55

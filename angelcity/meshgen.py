@@ -49,14 +49,16 @@ class MeshBuilder:
         self._v(p2, n, color)
         self.tris.append((i, i + 1, i + 2))
 
-    def add_quad(self, p0, p1, p2, p3, color, normal=None, uvs=None):
-        """Counter-clockwise winding as seen from the normal side."""
+    def add_quad(self, p0, p1, p2, p3, color, normal=None, uvs=None, colors=None):
+        """Counter-clockwise winding as seen from the normal side. `colors` overrides
+        the flat color per-vertex (used for baked AO gradients)."""
         n = normal or _norm(_cross(_sub(p1, p0), _sub(p3, p0)))
         uvs = uvs or ((0, 0), (0, 0), (0, 0), (0, 0))
-        i = self._v(p0, n, color, uvs[0])
-        self._v(p1, n, color, uvs[1])
-        self._v(p2, n, color, uvs[2])
-        self._v(p3, n, color, uvs[3])
+        cs = colors or (color, color, color, color)
+        i = self._v(p0, n, cs[0], uvs[0])
+        self._v(p1, n, cs[1], uvs[1])
+        self._v(p2, n, cs[2], uvs[2])
+        self._v(p3, n, cs[3], uvs[3])
         self.tris.append((i, i + 1, i + 2))
         self.tris.append((i, i + 2, i + 3))
 
@@ -86,8 +88,10 @@ class MeshBuilder:
         self.add_quad((x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z), color, (0, 0, 1))
 
     def add_box(self, cx, cy, z0, sx, sy, sz, color, heading=0.0, top_color=None,
-                bottom=False):
-        """Axis box centered at (cx,cy), resting on z0, optionally rotated about Z."""
+                bottom=False, wall_uv=0.0, ao=0.0):
+        """Axis box centered at (cx,cy), resting on z0, optionally rotated about Z.
+        wall_uv > 0 bakes wall UVs (u along the face, v up) at that meters-per-repeat.
+        ao > 0 darkens the wall bases by that fraction (cheap contact occlusion)."""
         hx, hy = sx * 0.5, sy * 0.5
         z1 = z0 + sz
         corners = []
@@ -98,16 +102,26 @@ class MeshBuilder:
         tc = top_color or color
         self.add_quad((c[0][0], c[0][1], z1), (c[1][0], c[1][1], z1),
                       (c[2][0], c[2][1], z1), (c[3][0], c[3][1], z1), tc)
+        base = tuple(v * (1.0 - ao) for v in color[:3]) + ((color[3],) if len(color) > 3 else ())
         for i in range(4):
             a, b = c[i], c[(i + 1) % 4]
+            uvs = None
+            if wall_uv > 0:
+                w = math.hypot(b[0] - a[0], b[1] - a[1]) / wall_uv
+                uvs = ((0, z0 / wall_uv), (w, z0 / wall_uv), (w, z1 / wall_uv),
+                       (0, z1 / wall_uv))
+            colors = (base, base, color, color) if ao > 0 else None
             self.add_quad((a[0], a[1], z0), (b[0], b[1], z0),
-                          (b[0], b[1], z1), (a[0], a[1], z1), color)
+                          (b[0], b[1], z1), (a[0], a[1], z1), color,
+                          uvs=uvs, colors=colors)
         if bottom:
             self.add_quad((c[3][0], c[3][1], z0), (c[2][0], c[2][1], z0),
                           (c[1][0], c[1][1], z0), (c[0][0], c[0][1], z0), color)
 
-    def add_gable(self, cx, cy, z0, sx, sy, roof_h, color, heading=0.0):
-        """Triangular prism roof sitting on z0, ridge along local X."""
+    def add_gable(self, cx, cy, z0, sx, sy, roof_h, color, heading=0.0, uv=0.0,
+                  end_color=None):
+        """Triangular prism roof sitting on z0, ridge along local X. uv > 0 bakes
+        slope UVs so tile courses run parallel to the ridge."""
         hx, hy = sx * 0.5, sy * 0.5
 
         def w(dx, dy, z):
@@ -117,10 +131,21 @@ class MeshBuilder:
         ridge0, ridge1 = w(-hx, 0, z0 + roof_h), w(hx, 0, z0 + roof_h)
         a0, a1 = w(-hx, -hy, z0), w(hx, -hy, z0)
         b0, b1 = w(-hx, hy, z0), w(hx, hy, z0)
-        self.add_quad(a0, a1, ridge1, ridge0, color)
-        self.add_quad(ridge0, ridge1, b1, b0, color)
-        self.add_tri(a0, ridge0, b0, color)
-        self.add_tri(a1, b1, ridge1, color)
+        uvs = None
+        if uv > 0:
+            slope = math.hypot(hy, roof_h) / uv
+            L = sx / uv
+            uvs = ((0, 0), (0, L), (slope, L), (slope, 0))
+            self.add_quad(a0, a1, ridge1, ridge0, color,
+                          uvs=((0, 0), (L, 0), (L, slope), (0, slope)))
+            self.add_quad(ridge0, ridge1, b1, b0, color,
+                          uvs=((0, slope), (L, slope), (L, 0), (0, 0)))
+        else:
+            self.add_quad(a0, a1, ridge1, ridge0, color)
+            self.add_quad(ridge0, ridge1, b1, b0, color)
+        ec = end_color or color
+        self.add_tri(a0, ridge0, b0, ec)
+        self.add_tri(a1, b1, ridge1, ec)
 
     def add_cylinder(self, cx, cy, z0, radius, height, color, sides=10, top=True,
                      top_color=None, r_top=None):

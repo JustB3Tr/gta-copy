@@ -290,9 +290,11 @@ class Player:
                         and abs(ped.z - car.z) < 2:
                     ped.hit_by_car(car)
         car.set_headlights(self.game.is_night)
+        car.emit_driving_fx(dt)
         car.sync()
         self.x, self.y, self.z = car.x, car.y, car.z
         if self.game.ground.is_wet(car.x, car.y, car.z):
+            self.game.fx.splash(car.x, car.y)
             self.game.fished_out()
         if car.wreck:
             self.take_damage_direct(65)

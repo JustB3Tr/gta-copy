@@ -59,15 +59,36 @@ The map is a compressed but geographically honest LA, laid out like the real cit
 
 The renderer runs a modern pipeline — with every texture still generated in code:
 
-- **Per-pixel lighting** with a **real-time 2048px sun shadow map** whose frustum
+- **Per-pixel lighting** with a **real-time 4096px sun shadow map** whose frustum
   follows the player, so towers, palms, lampposts, cars, and you all cast true shadows
-- **Procedural textures**: window-grid facades on the downtown towers (UV-mapped at
-  build time), ground grain/blotch detail projected across the whole city, and
-  two-layer **animated water** drifting against itself
-- **Specular paint** on every vehicle, MSAA 4x, **bloom** post-processing, a horizon
-  glow dome tinted by the time of day, and an additive sun halo
+- **A full procedural material library**: asphalt with cracks and patches, concrete
+  sidewalk slabs with expansion joints, terracotta roof-tile courses, stucco, rusty
+  corrugated metal, grass, rippled sand — each surface class in the whole city carries
+  its own texture (walls and roofs are UV-mapped at build time so ribs and tile
+  courses run the right way)
+- **Dressed buildings everywhere**: houses with framed windows, doors, porches,
+  chimneys, eave fascia, garages with ribbed doors, driveways, picket fences and
+  pools; storefronts with mullioned glass, striped awnings, and named sign boards;
+  towers with dark-glass lobbies, entrance canopies, and rooftop water tanks and
+  penthouses; warehouses with roll-up doors and pipework — plus baked contact
+  shadows under every structure
+- **A living streetscape**: curbs, zebra crosswalks, stop lines, lane arrows,
+  manholes, fire hydrants, parking meters, bus benches, wood power poles with sagging
+  lines, and freeway billboards running original ads
+- **Real dynamic lights at night**: the player car casts true spotlight headlight
+  beams, and pursuing police carry a flashing red/blue strobe light
+- **Motion & physics accuracy**: mass-weighted collision impulses, visible weight
+  transfer (body roll in corners, dive under braking), coordinated bank-to-turn
+  flight (`yaw rate = g·tan(bank)/V`), ballistic pedestrian knockdowns, skid marks
+  that fade over time, exhaust and off-road dust, boat wakes, splashes and ripples
+- **Sky & water**: drifting procedural clouds, a horizon glow dome tinted by the time
+  of day, sun halo, two-layer animated water with a specular sun glint, layered surf
+  foam at the shoreline
+- MSAA 4x + **bloom** post-processing
 - `--quality high|medium|low` — low falls back to the fast fixed-function pipeline
   (that's what the CI smoke test uses); high is the default
+
+![Suburban street](docs/suburb.png)
 
 ![LAX](docs/lax.png)
 ![Downtown, under the 110](docs/downtown.png)

@@ -177,6 +177,11 @@ class AngelCityGame(ShowBase):
             p.x, p.y = -330, 1035
             p.cam_yaw = 0.0
             p.cam_pitch = 0.10
+        elif name == "suburb":
+            self.tod = 0.42
+            p.x, p.y = -560, -320
+            p.cam_yaw = math.pi * 0.22
+            p.cam_pitch = -0.04
         elif name == "pier":
             self.tod = 0.47
             p.x, p.y = -1520, -300
@@ -342,6 +347,7 @@ class AngelCityGame(ShowBase):
             return
         self.hud.flash_message("Fished out of the bay. Soggy but alive.")
         self.sfx.play("splash", 0.9)
+        self.fx.splash(*self.player_world_pos())
         if p.car:
             car = p.car
             p.car = None
@@ -470,7 +476,7 @@ class AngelCityGame(ShowBase):
         self.sun_disc.setPos(-sd.x * 2000, -sd.y * 2000, -sd.z * 2000)
         self.moon_disc.setPos(sd.x * 2000, sd.y * 2000, max(200, sd.z * 2000))
         alpha = max(0.0, min(1.0, -el * 4))
-        self.gfx.update(self.t, sd, sun_col, fogc, el)
+        self.gfx.update(self.t, sd, sun_col, fogc, el, sky_col=sky)
         self.stars.setColorScale(1, 1, 1, alpha)
         self.moon_disc.setColorScale(1, 1, 1, alpha)
         self.sun_disc.setColorScale(1, 1, 1, max(0.0, min(1.0, el * 6 + 0.4)))
