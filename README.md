@@ -55,6 +55,20 @@ The map is a compressed but geographically honest LA, laid out like the real cit
   synthesized with numpy at first launch
 - Minimap + full city map (`M`) with labeled landmarks
 
+## Graphics
+
+The renderer runs a modern pipeline — with every texture still generated in code:
+
+- **Per-pixel lighting** with a **real-time 2048px sun shadow map** whose frustum
+  follows the player, so towers, palms, lampposts, cars, and you all cast true shadows
+- **Procedural textures**: window-grid facades on the downtown towers (UV-mapped at
+  build time), ground grain/blotch detail projected across the whole city, and
+  two-layer **animated water** drifting against itself
+- **Specular paint** on every vehicle, MSAA 4x, **bloom** post-processing, a horizon
+  glow dome tinted by the time of day, and an additive sun halo
+- `--quality high|medium|low` — low falls back to the fast fixed-function pipeline
+  (that's what the CI smoke test uses); high is the default
+
 ![LAX](docs/lax.png)
 ![Downtown, under the 110](docs/downtown.png)
 ![Night in Koreatown](docs/night.png)

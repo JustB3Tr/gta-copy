@@ -25,20 +25,21 @@ def _norm(v):
 
 
 class MeshBuilder:
-    """Accumulates colored triangles, then builds a single GeomNode."""
+    """Accumulates colored (optionally UV-mapped) triangles into a single GeomNode."""
 
     def __init__(self, name="mesh"):
         self.name = name
-        self.verts = []   # (x,y,z, nx,ny,nz, r,g,b,a)
+        self.verts = []   # (x,y,z, nx,ny,nz, r,g,b,a, u,v)
         self.tris = []
 
     @property
     def empty(self):
         return not self.tris
 
-    def _v(self, p, n, c):
+    def _v(self, p, n, c, uv=(0.0, 0.0)):
         a = c[3] if len(c) > 3 else 1.0
-        self.verts.append((p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2], a))
+        self.verts.append((p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2], a,
+                           uv[0], uv[1]))
         return len(self.verts) - 1
 
     def add_tri(self, p0, p1, p2, color, normal=None):
@@ -48,15 +49,37 @@ class MeshBuilder:
         self._v(p2, n, color)
         self.tris.append((i, i + 1, i + 2))
 
-    def add_quad(self, p0, p1, p2, p3, color, normal=None):
+    def add_quad(self, p0, p1, p2, p3, color, normal=None, uvs=None):
         """Counter-clockwise winding as seen from the normal side."""
         n = normal or _norm(_cross(_sub(p1, p0), _sub(p3, p0)))
-        i = self._v(p0, n, color)
-        self._v(p1, n, color)
-        self._v(p2, n, color)
-        self._v(p3, n, color)
+        uvs = uvs or ((0, 0), (0, 0), (0, 0), (0, 0))
+        i = self._v(p0, n, color, uvs[0])
+        self._v(p1, n, color, uvs[1])
+        self._v(p2, n, color, uvs[2])
+        self._v(p3, n, color, uvs[3])
         self.tris.append((i, i + 1, i + 2))
         self.tris.append((i, i + 2, i + 3))
+
+    def add_facade_box(self, cx, cy, z0, sx, sy, sz, color, uv_scale=0.25,
+                       top_color=None):
+        """Box whose four walls carry window-grid UVs (u along the wall, v up)."""
+        hx, hy = sx * 0.5, sy * 0.5
+        z1 = z0 + sz
+        corners = [(cx - hx, cy - hy), (cx + hx, cy - hy), (cx + hx, cy + hy),
+                   (cx - hx, cy + hy)]
+        u = 0.0
+        for i in range(4):
+            a, b = corners[i], corners[(i + 1) % 4]
+            w = math.hypot(b[0] - a[0], b[1] - a[1])
+            self.add_quad((a[0], a[1], z0), (b[0], b[1], z0),
+                          (b[0], b[1], z1), (a[0], a[1], z1), color,
+                          uvs=((u, z0 * uv_scale), (u + w * uv_scale, z0 * uv_scale),
+                               (u + w * uv_scale, z1 * uv_scale), (u, z1 * uv_scale)))
+            u += w * uv_scale
+        tc = top_color or tuple(v * 0.6 for v in color[:3])
+        self.add_quad((corners[0][0], corners[0][1], z1), (corners[1][0], corners[1][1], z1),
+                      (corners[2][0], corners[2][1], z1), (corners[3][0], corners[3][1], z1),
+                      tc, (0, 0, 1))
 
     def add_rect(self, x0, y0, x1, y1, z, color):
         """Horizontal upward-facing rectangle."""
@@ -161,16 +184,18 @@ class MeshBuilder:
             self.add_quad(rights[i], rights[i + 1], lefts[i + 1], lefts[i], color)
 
     def build(self, parent, name=None):
-        fmt = GeomVertexFormat.getV3n3c4()
+        fmt = GeomVertexFormat.getV3n3c4t2()
         vdata = GeomVertexData(name or self.name, fmt, Geom.UHStatic)
         vdata.setNumRows(len(self.verts))
         vw = GeomVertexWriter(vdata, "vertex")
         nw = GeomVertexWriter(vdata, "normal")
         cw = GeomVertexWriter(vdata, "color")
-        for x, y, z, nx, ny, nz, r, g, b, a in self.verts:
+        tw = GeomVertexWriter(vdata, "texcoord")
+        for x, y, z, nx, ny, nz, r, g, b, a, u, v in self.verts:
             vw.addData3(x, y, z)
             nw.addData3(nx, ny, nz)
             cw.addData4(r, g, b, a)
+            tw.addData2(u, v)
         prim = GeomTriangles(Geom.UHStatic)
         for t in self.tris:
             prim.addVertices(*t)

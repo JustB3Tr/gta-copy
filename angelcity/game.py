@@ -8,6 +8,7 @@ from panda3d.core import (AmbientLight, CardMaker, ClockObject, DirectionalLight
                           TransparencyAttrib, Vec3, Vec4, WindowProperties)
 from . import config as C
 from .city import City
+from .gfx import Gfx
 from .hud import HUD
 from .meshgen import build_points
 from .npc import CopSystem, PedManager
@@ -81,6 +82,7 @@ class AngelCityGame(ShowBase):
             self.extra.append(Aircraft(self, kind, x, y, z, h))
         for (x, y, h) in self.city.boat_specs:
             self.extra.append(Boat(self, x, y, h))
+        self.gfx = Gfx(self, opts.get("quality", "high"))
         self.hud = HUD(self)
 
         self.t = 0.0
@@ -382,9 +384,13 @@ class AngelCityGame(ShowBase):
         self.hud.show_pause(self.paused)
 
     def _screenshot(self):
+        from panda3d.core import Filename, PNMImage
         self._shot_idx += 1
         path = "angelcity_%02d.png" % self._shot_idx
-        self.win.saveScreenshot(path)
+        img = PNMImage()
+        self.win.getScreenshot(img)
+        img.removeAlpha()
+        img.write(Filename.fromOsSpecific(os.path.abspath(path)))
         self.hud.flash_message("Saved %s" % path)
 
     def _on_e(self):
@@ -464,6 +470,7 @@ class AngelCityGame(ShowBase):
         self.sun_disc.setPos(-sd.x * 2000, -sd.y * 2000, -sd.z * 2000)
         self.moon_disc.setPos(sd.x * 2000, sd.y * 2000, max(200, sd.z * 2000))
         alpha = max(0.0, min(1.0, -el * 4))
+        self.gfx.update(self.t, sd, sun_col, fogc, el)
         self.stars.setColorScale(1, 1, 1, alpha)
         self.moon_disc.setColorScale(1, 1, 1, alpha)
         self.sun_disc.setColorScale(1, 1, 1, max(0.0, min(1.0, el * 6 + 0.4)))

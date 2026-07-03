@@ -3,7 +3,7 @@ plus ambient freeway cruisers on the elevated deck."""
 
 import math
 import random
-from panda3d.core import NodePath
+from panda3d.core import Material, NodePath
 from . import config as C
 from .meshgen import MeshBuilder
 
@@ -137,7 +137,16 @@ def _build_body(kind, color):
         piv = root.attachNewNode(name)
         piv.setPos(sx * (w / 2 - 0.08), sy * l, r)
         wheel_proto.getChild(0).copyTo(piv)
+    _apply_paint(root)
     return root
+
+
+def _apply_paint(root, shininess=70.0, spec=(0.85, 0.85, 0.95, 1)):
+    """Specular-only material: vertex colors stay as diffuse, sun adds highlights."""
+    m = Material("paint")
+    m.setSpecular(spec)
+    m.setShininess(shininess)
+    root.setMaterial(m)
 
 
 def get_car_proto(kind, color):
@@ -636,6 +645,7 @@ def _build_boat(color):
     b.add_box(0, -2.6, 0.5, 0.8, 0.5, 1.0, (0.25, 0.25, 0.28))  # outboard
     b.add_box(0, -0.9, 1.05, 1.4, 1.6, 0.4, (0.75, 0.55, 0.35))  # seats
     b.build(root)
+    _apply_paint(root, 40.0, (0.5, 0.55, 0.6, 1))
     return root
 
 
@@ -683,6 +693,7 @@ def _build_plane(sub, color):
     sb.add_rect(-2.5, -l / 2, 2.5, l / 2, 0.04, (0.05, 0.05, 0.07, 0.3))
     sh = sb.build(root)
     sh.setTransparency(True)
+    _apply_paint(root, 55.0)
     return root
 
 
@@ -713,6 +724,7 @@ def _build_heli(color):
     sb.add_rect(-1.4, -4.5, 1.4, 3.2, 0.04, (0.05, 0.05, 0.07, 0.3))
     sh = sb.build(root)
     sh.setTransparency(True)
+    _apply_paint(root, 55.0)
     return root
 
 

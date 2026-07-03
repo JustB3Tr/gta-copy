@@ -11,7 +11,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def test_smoke():
     cmd = [sys.executable, os.path.join(ROOT, "main.py"),
-           "--headless", "--no-audio", "--frames", "60"]
+           "--headless", "--no-audio", "--quality", "low", "--frames", "60"]
     if os.environ.get("DISPLAY") is None and os.name != "nt":
         xvfb = "/usr/bin/xvfb-run"
         if os.path.exists(xvfb):

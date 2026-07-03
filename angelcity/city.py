@@ -61,8 +61,11 @@ class City:
         self.chunks = {}
         self.water_b = MeshBuilder("water")
         self.night_b = MeshBuilder("night")
+        self.facade_b = MeshBuilder("facades")   # tower walls with window-grid UVs
         self.lights_g_b = MeshBuilder("lights_green")
         self.lights_r_b = MeshBuilder("lights_red")
+        self.water_np = None
+        self.facade_np = None
         self.anims = []          # (nodepath, cabins, speed, mode: 'spin'|'rock')
         self.parked_spots = []
         self.aircraft_specs = []  # (kind, x, y, z_or_None, heading)
@@ -179,8 +182,10 @@ class City:
         for key, b in self.chunks.items():
             if not b.empty:
                 b.build(self.root)
-        w = self.water_b.build(self.root)
-        w.setTransparency(True)
+        if not self.facade_b.empty:
+            self.facade_np = self.facade_b.build(self.root)
+        self.water_np = self.water_b.build(self.root)
+        self.water_np.setTransparency(True)
         self.night_np = self.night_b.build(self.root)
         self.night_np.setTransparency(True)
         self.night_np.setLightOff()
@@ -487,23 +492,19 @@ class City:
         hmax = 170 - (abs(cx - 620) + abs(cy - 380)) * 0.14
         h = max(35.0, hmax * rng.uniform(0.55, 1.0))
         col = _vary(rng, rng.choice(GLASS_TOWER), 0.03)
-        dark = tuple(v * 0.55 for v in col)
+        fb = self.facade_b
         if style == "glass":
-            b.add_box(cx, cy, 0, w, d, h, col, top_color=(0.35, 0.35, 0.38))
-            zz = 6.0
-            while zz < h - 4:
-                b.add_box(cx, cy, zz, w + 0.3, d + 0.3, 1.4, dark)
-                zz += 6.0
+            fb.add_facade_box(cx, cy, 0, w, d, h, col, top_color=(0.35, 0.35, 0.38))
             b.add_box(cx, cy, h, w * 0.3, d * 0.3, 4, (0.3, 0.3, 0.33))
         elif style == "stepped":
-            b.add_box(cx, cy, 0, w, d, h * 0.55, col)
-            b.add_box(cx, cy, h * 0.55, w * 0.72, d * 0.72, h * 0.30, col)
-            b.add_box(cx, cy, h * 0.85, w * 0.45, d * 0.45, h * 0.15, col)
+            fb.add_facade_box(cx, cy, 0, w, d, h * 0.55, col)
+            fb.add_facade_box(cx, cy, h * 0.55, w * 0.72, d * 0.72, h * 0.30, col)
+            fb.add_facade_box(cx, cy, h * 0.85, w * 0.45, d * 0.45, h * 0.15, col)
             b.add_box(cx, cy, h, 1.2, 1.2, 12, (0.5, 0.5, 0.55))
         else:  # dark slab, Aon-style
-            col = (0.22, 0.24, 0.28)
-            b.add_box(cx, cy, 0, w * 0.7, d * 0.7, h * 1.05, col,
-                      top_color=(0.30, 0.30, 0.33))
+            col = (0.30, 0.32, 0.36)
+            fb.add_facade_box(cx, cy, 0, w * 0.7, d * 0.7, h * 1.05, col,
+                              top_color=(0.30, 0.30, 0.33))
         self.add_collider(cx - w / 2, cx + w / 2, cy - d / 2, cy + d / 2, 0, h)
         self._windows(cx, cy, w, d, h, rng)
         for _ in range(3):
@@ -561,11 +562,8 @@ class City:
     def _wilshire_grand(self, b, rng_cx, cy):
         cx = rng_cx
         col = (0.42, 0.52, 0.64)
-        b.add_box(cx, cy, 0, 34, 22, 160, col, top_color=(0.5, 0.55, 0.6))
-        zz = 6.0
-        while zz < 156:
-            b.add_box(cx, cy, zz, 34.3, 22.3, 1.2, (0.30, 0.34, 0.40))
-            zz += 7.0
+        self.facade_b.add_facade_box(cx, cy, 0, 34, 22, 160, col,
+                                     top_color=(0.5, 0.55, 0.6))
         # curved sail crown approximated with two tilted slabs + spire
         b.add_quad((cx - 17, cy - 8, 160), (cx + 17, cy - 8, 160), (cx + 17, cy + 4, 174),
                    (cx - 17, cy + 4, 174), (0.85, 0.90, 0.95))

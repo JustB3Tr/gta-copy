@@ -15,6 +15,8 @@ def parse_args():
     ap.add_argument("--no-audio", action="store_true")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--fps", action="store_true", help="show frame-rate meter")
+    ap.add_argument("--quality", choices=("high", "medium", "low"), default="high",
+                    help="high: shadows+bloom+MSAA; low: fast fixed-function")
     # headless / capture (used by tests and CI)
     ap.add_argument("--headless", action="store_true", help="render offscreen")
     ap.add_argument("--frames", type=int, default=0, help="run N frames then exit")
@@ -36,6 +38,8 @@ def main():
         "notify-level-x11display error",
         "default-antialias-enable 1",
     ]
+    if args.quality != "low":
+        prc += ["framebuffer-multisample 1", "multisamples 4"]
     if args.fullscreen:
         prc.append("fullscreen 1")
     if args.headless:
@@ -59,6 +63,7 @@ def main():
         no_audio=args.no_audio or args.headless,
         seed=args.seed,
         scenario=args.scenario,
+        quality=args.quality,
     ))
 
     if args.frames:
@@ -66,7 +71,12 @@ def main():
             game.taskMgr.step()
         if args.screenshot:
             os.makedirs(os.path.dirname(os.path.abspath(args.screenshot)), exist_ok=True)
-            game.win.saveScreenshot(args.screenshot)
+            # save RGB only: post-process passes can leave partial alpha in the window
+            from panda3d.core import Filename, PNMImage
+            img = PNMImage()
+            game.win.getScreenshot(img)
+            img.removeAlpha()
+            img.write(Filename.fromOsSpecific(os.path.abspath(args.screenshot)))
             print("saved", args.screenshot)
         game.destroy()
         return 0
