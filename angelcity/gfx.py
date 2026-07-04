@@ -72,7 +72,7 @@ def detail_texture(size=256, seed=3):
     return _tex_from_array(arr, "detail")
 
 
-def asphalt_texture(size=256, seed=11):
+def asphalt_texture(size=512, seed=11):
     """Dark asphalt: fine aggregate, faint wear bands, occasional crack + patch."""
     rng = np.random.default_rng(seed)
     grain = rng.uniform(-1, 1, (size, size))
@@ -92,7 +92,7 @@ def asphalt_texture(size=256, seed=11):
     return _tex_from_array(arr, "asphalt")
 
 
-def concrete_texture(size=256, seed=13):
+def concrete_texture(size=512, seed=13):
     """Sidewalk slabs: expansion joints every half-texture + mottling + edge wear."""
     rng = np.random.default_rng(seed)
     v = 0.94 + rng.uniform(-1, 1, (size, size)) * 0.035 + _fbm(size, seed, 3) * 0.05
@@ -245,7 +245,7 @@ def normal_texture(mat, size=256):
     return _tex_from_array(_encode_normal(h, strength), "n_" + mat)
 
 
-def facade_texture(size=128, cell=16, seed=7):
+def facade_texture(size=256, cell=32, seed=7):
     """Window grid for tower walls: glass panes with mullions and per-pane variance."""
     rng = np.random.default_rng(seed)
     arr = np.zeros((size, size, 3))
@@ -390,12 +390,15 @@ class Gfx:
         self._clouds()
         self._dynamic_lights()
 
-        # bloom (graceful fallback if the driver can't do offscreen buffers)
+        # bloom + SSAO (graceful fallback if the driver can't do offscreen buffers)
         try:
             from direct.filter.CommonFilters import CommonFilters
             f = CommonFilters(game.win, game.cam)
             ok = f.setBloom(blend=(0.30, 0.40, 0.30, 0.0), mintrigger=0.72,
                             maxtrigger=1.0, desat=0.2, intensity=1.0, size="medium")
+            if ok and quality == "high":
+                f.setAmbientOcclusion(numsamples=16, radius=0.028, amount=1.6,
+                                      strength=0.014, falloff=0.000004)
             self.filters = f if ok else None
         except Exception:
             self.filters = None
