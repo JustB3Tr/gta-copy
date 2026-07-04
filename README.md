@@ -77,6 +77,13 @@ The renderer runs a modern pipeline — with every texture still generated in co
   lines, and freeway billboards running original ads
 - **Real dynamic lights at night**: the player car casts true spotlight headlight
   beams, and pursuing police carry a flashing red/blue strobe light
+- **Tangent-space normal maps on every material** (stucco grain, sidewalk joints,
+  roof-tile courses, corrugation ribs, asphalt aggregate, sand ripples, facade
+  mullions) with per-material specular response — matte stucco to glossy curtain wall
+- **A real solar model**: the sun follows the true Los Angeles sky path (34.05°N,
+  June 21 ephemeris) with a blackbody color ramp — golden light at low elevations —
+  plus a gray **marine-layer** haze that burns off mid-morning, June-gloom style
+- **Real-world scale**: 3.6 m lanes, 3 m sidewalks, Washingtonia-height skyline palms
 - **Motion & physics accuracy**: mass-weighted collision impulses, visible weight
   transfer (body roll in corners, dive under braking), coordinated bank-to-turn
   flight (`yaw rate = g·tan(bank)/V`), ballistic pedestrian knockdowns, skid marks

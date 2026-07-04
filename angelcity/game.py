@@ -147,10 +147,16 @@ class AngelCityGame(ShowBase):
             p.rig.root.hide()
 
         if name == "drive":
-            self.tod = 0.455
+            self.tod = 0.52
             car = Car(self, "coupe", -1377, -350, 0, color=(0.85, 0.10, 0.15))
             put_in(car)
             car.speed = 16
+            p.x, p.y = car.x, car.y
+        elif name == "golden":
+            self.tod = 0.779           # ~18:40 solar — low golden sun
+            car = Car(self, "lowrider", -1377, -100, 0)
+            put_in(car)
+            car.speed = 14
             p.x, p.y = car.x, car.y
         elif name == "downtown":
             self.tod = 0.30
@@ -284,9 +290,21 @@ class AngelCityGame(ShowBase):
         l = math.sqrt(dx * dx + dy * dy + dz * dz) or 1
         return dx / l, dy / l, dz / l
 
+    def solar(self):
+        """True sun elevation/azimuth for Los Angeles (deg), from time-of-day."""
+        lst = self.tod * 24.0
+        lat = math.radians(C.SOLAR_LAT)
+        dec = math.radians(23.44) * math.sin(math.tau * (284 + C.SOLAR_DAY) / 365.0)
+        H = math.radians((lst - 12.0) * 15.0)
+        el = math.asin(math.sin(lat) * math.sin(dec) +
+                       math.cos(lat) * math.cos(dec) * math.cos(H))
+        az = math.atan2(math.sin(H),
+                        math.cos(H) * math.sin(lat) - math.tan(dec) * math.cos(lat))
+        return math.degrees(el), (math.degrees(az) + 180.0) % 360.0
+
     @property
     def is_night(self):
-        return math.sin(self.tod * math.tau) < -0.04
+        return self.solar()[0] < -1.5
 
     # ---------------- game events ----------------
 
@@ -450,15 +468,32 @@ class AngelCityGame(ShowBase):
     # ---------------- day/night ----------------
 
     def _sky_update(self):
-        el = math.sin(self.tod * math.tau)          # sun elevation -1..1
-        az = self.tod * 360.0 + 90
-        self.sun_np.setHpr(az, -max(-30, el * 80), 0)
-        warm = max(0.0, min(1.0, 1.0 - abs(el - 0.12) * 3)) if el > -0.1 else 0.0
-        if el > 0:
-            sun_col = _lerp((0.95, 0.9, 0.82), (0.95, 0.55, 0.30), warm)
-            sky = _lerp((0.55, 0.74, 0.92), (0.93, 0.62, 0.42), warm)
-            fogc = _lerp((0.80, 0.76, 0.70), (0.9, 0.66, 0.5), warm)
-            amb = _lerp((0.40, 0.40, 0.45), (0.45, 0.38, 0.36), warm)
+        el_deg, az_deg = self.solar()
+        el = math.sin(math.radians(el_deg))
+        # aim the directional light with the real sun geometry (compass az -> Panda H)
+        self.sun_np.setHpr(-az_deg + 180.0, -max(3.0, el_deg), 0)
+        if el_deg > 0:
+            # blackbody-ish ramp: golden at the horizon, neutral-warm at noon
+            if el_deg < 8:
+                sun_col = _lerp((1.0, 0.52, 0.22), (1.0, 0.72, 0.45), el_deg / 8)
+            elif el_deg < 25:
+                sun_col = _lerp((1.0, 0.72, 0.45), (1.0, 0.93, 0.80), (el_deg - 8) / 17)
+            else:
+                sun_col = _lerp((1.0, 0.93, 0.80), (1.0, 0.98, 0.93),
+                                min(1.0, (el_deg - 25) / 35))
+            strength = max(0.30, min(1.0, el_deg / 9.0))
+            sun_col = tuple(cc * strength for cc in sun_col)
+            low = max(0.0, min(1.0, 1.0 - el_deg / 14.0))
+            sky = _lerp((0.55, 0.74, 0.92), (0.93, 0.62, 0.42), low)
+            fogc = _lerp((0.80, 0.76, 0.70), (0.9, 0.66, 0.5), low)
+            amb = _lerp((0.40, 0.40, 0.45), (0.45, 0.38, 0.36), low)
+            # June-gloom marine layer: gray haze until it burns off mid-morning
+            lst = self.tod * 24.0
+            if 5.0 < lst < 11.0:
+                m = min(1.0, max(0.0, (10.5 - lst) / 4.0)) * 0.7
+                fogc = _lerp(fogc, (0.78, 0.79, 0.80), m)
+                sky = _lerp(sky, (0.72, 0.75, 0.78), m * 0.7)
+                sun_col = tuple(cc * (1 - 0.35 * m) for cc in sun_col)
         else:
             k = min(1.0, -el * 5)
             sun_col = _lerp((0.55, 0.45, 0.40), (0.14, 0.16, 0.26), k)
@@ -468,8 +503,12 @@ class AngelCityGame(ShowBase):
         self.sun.setColor(Vec4(*sun_col, 1))
         self.amb.setColor(Vec4(*amb, 1))
         self.setBackgroundColor(sky[0], sky[1], sky[2], 1.0)
+        lst = self.tod * 24.0
+        marine = 0.7 if (5.0 < lst < 11.0 and el_deg > 0) else 0.0
+        near = 200 if self.is_night else (170 if marine else 300)
+        far = 1500 if (marine and el_deg > 0) else 2300
         self.fog.setColor(*fogc)
-        self.fog.setLinearRange(300 if not self.is_night else 200, 2300)
+        self.fog.setLinearRange(near, far)
         px, py = self.player_world_pos()
         self.sky.setPos(px, py, 0)
         sd = self.sun_np.getQuat().getForward()

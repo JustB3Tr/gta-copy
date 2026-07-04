@@ -2,8 +2,28 @@
 there are no asset files. Meshes use flat shading via per-face normals and vertex colors."""
 
 import math
-from panda3d.core import (Geom, GeomNode, GeomPoints, GeomTriangles, GeomVertexData,
-                          GeomVertexFormat, GeomVertexWriter, NodePath)
+from panda3d.core import (Geom, GeomNode, GeomPoints, GeomTriangles, GeomVertexArrayFormat,
+                          GeomVertexData, GeomVertexFormat, GeomVertexWriter, InternalName,
+                          NodePath)
+
+_TBN_FMT = None
+
+
+def _tbn_format():
+    """v3n3c4t2 plus tangent/binormal so the shader generator can normal-map."""
+    global _TBN_FMT
+    if _TBN_FMT is None:
+        arr = GeomVertexArrayFormat()
+        arr.addColumn(InternalName.getVertex(), 3, Geom.NTFloat32, Geom.CPoint)
+        arr.addColumn(InternalName.getNormal(), 3, Geom.NTFloat32, Geom.CNormal)
+        arr.addColumn(InternalName.getColor(), 4, Geom.NTFloat32, Geom.CColor)
+        arr.addColumn(InternalName.getTexcoord(), 2, Geom.NTFloat32, Geom.CTexcoord)
+        arr.addColumn(InternalName.getTangent(), 3, Geom.NTFloat32, Geom.CVector)
+        arr.addColumn(InternalName.getBinormal(), 3, Geom.NTFloat32, Geom.CVector)
+        fmt = GeomVertexFormat()
+        fmt.addArray(arr)
+        _TBN_FMT = GeomVertexFormat.registerFormat(fmt)
+    return _TBN_FMT
 
 
 def rot2(x, y, ang):
@@ -209,18 +229,27 @@ class MeshBuilder:
             self.add_quad(rights[i], rights[i + 1], lefts[i + 1], lefts[i], color)
 
     def build(self, parent, name=None):
-        fmt = GeomVertexFormat.getV3n3c4t2()
-        vdata = GeomVertexData(name or self.name, fmt, Geom.UHStatic)
+        vdata = GeomVertexData(name or self.name, _tbn_format(), Geom.UHStatic)
         vdata.setNumRows(len(self.verts))
         vw = GeomVertexWriter(vdata, "vertex")
         nw = GeomVertexWriter(vdata, "normal")
         cw = GeomVertexWriter(vdata, "color")
         tw = GeomVertexWriter(vdata, "texcoord")
+        tgw = GeomVertexWriter(vdata, "tangent")
+        bnw = GeomVertexWriter(vdata, "binormal")
         for x, y, z, nx, ny, nz, r, g, b, a, u, v in self.verts:
             vw.addData3(x, y, z)
             nw.addData3(nx, ny, nz)
             cw.addData4(r, g, b, a)
             tw.addData2(u, v)
+            # tangent frame: floors map U to +X; walls map U along the face, V up
+            if abs(nz) > 0.9:
+                tgw.addData3(1, 0, 0)
+                bnw.addData3(0, 1, 0)
+            else:
+                tl = math.hypot(ny, nx) or 1.0
+                tgw.addData3(-ny / tl, nx / tl, 0)
+                bnw.addData3(0, 0, 1)
         prim = GeomTriangles(Geom.UHStatic)
         for t in self.tris:
             prim.addVertices(*t)

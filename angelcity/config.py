@@ -48,7 +48,7 @@ ROADS_H = [-1140.0 + i * 180.0 for i in range(12)]   # street centerlines (y)
 MAJOR_EVERY = 3
 ROAD_HALF_MAJOR = 7.0
 ROAD_HALF_MINOR = 5.0
-SIDEWALK_W = 2.5
+SIDEWALK_W = 3.0      # real LA sidewalks run ~3 m
 LANE_OFFSET = 3.0
 
 # real street names, west→east for avenues, south→north for streets
@@ -75,7 +75,9 @@ MARINA_Y = -600.0                        # small-craft harbor at the creek mouth
 BRIDGE_Y = -1255.0                       # green suspension bridge over the river mouth
 
 DAY_LENGTH = 480.0
-START_TOD = 0.32
+START_TOD = 0.40
+SOLAR_LAT = 34.05    # Los Angeles
+SOLAR_DAY = 172      # June 21 sun path
 
 PLAYER_MAX_HP = 100.0
 START_MONEY = 350

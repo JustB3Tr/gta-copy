@@ -188,6 +188,62 @@ _MAT_TEX_FNS = {"asphalt": asphalt_texture, "concrete": concrete_texture,
                 "roof": rooftile_texture, "stucco": stucco_texture,
                 "grass": grass_texture, "sand": sand_texture, "metal": metal_texture}
 
+# physically-motivated surface response per class (specular color scale, shininess)
+MAT_SURFACE = {"asphalt": (0.18, 14), "concrete": (0.10, 8), "roof": (0.22, 12),
+               "stucco": (0.06, 6), "grass": (0.04, 4), "sand": (0.07, 5),
+               "metal": (0.65, 30)}
+
+
+def _encode_normal(h, strength):
+    dx = np.roll(h, -1, 1) - np.roll(h, 1, 1)
+    dy = np.roll(h, -1, 0) - np.roll(h, 1, 0)
+    nx, ny, nz = -dx * strength, -dy * strength, np.ones_like(h)
+    l = np.sqrt(nx * nx + ny * ny + nz * nz)
+    arr = np.stack([nx / l, ny / l, nz / l], axis=-1) * 0.5 + 0.5
+    return arr
+
+
+def normal_texture(mat, size=256):
+    """Tangent-space normal map per material, from analytic height fields that line
+    up with the diffuse patterns (joints, tile courses, ribs, ripples, grain)."""
+    y, x = np.mgrid[0:size, 0:size] / size
+    rng = np.random.default_rng(101)
+    if mat == "concrete":
+        h = _fbm(size, 13, 3) * 0.25
+        for k in (0, size // 2):
+            h[k:k + 2, :] -= 1.2
+            h[:, k:k + 2] -= 1.2
+        strength = 2.2
+    elif mat == "roof":
+        course = 8
+        row = (y * course) % 1.0
+        h = np.clip(np.sin(row * math.pi), 0, 1) * 1.6
+        h[row < 0.10] -= 1.2
+        strength = 2.8
+    elif mat == "metal":
+        h = np.abs(np.sin(x * 12 * math.tau)) * 1.4 + _fbm(size, 31, 2) * 0.3
+        strength = 2.6
+    elif mat == "sand":
+        h = np.sin((x * 7 + _fbm(size, 29, 2) * 1.6) * math.tau) * 0.9
+        strength = 1.8
+    elif mat == "asphalt":
+        h = rng.uniform(-1, 1, (size, size)) * 0.35 + _fbm(size, 11, 3) * 0.5
+        strength = 1.6
+    elif mat == "facade":
+        cell = 16
+        h = np.ones((size, size)) * 0.5
+        for k in range(0, size, cell):
+            h[k:k + 2, :] -= 1.4
+            h[:, k:k + 2] -= 1.4
+        strength = 2.0
+    elif mat == "grass":
+        h = rng.uniform(-1, 1, (size, size)) * 0.3 + _fbm(size, 19, 3) * 0.4
+        strength = 0.6
+    else:   # stucco
+        h = rng.uniform(-1, 1, (size, size)) * 0.5 + _fbm(size, 19, 3) * 0.4
+        strength = 1.0
+    return _tex_from_array(_encode_normal(h, strength), "n_" + mat)
+
 
 def facade_texture(size=128, cell=16, seed=7):
     """Window grid for tower walls: glass panes with mullions and per-pane variance."""
@@ -275,26 +331,44 @@ class Gfx:
         city_np.setTexScale(ts, 1 / 9.0, 1 / 9.0)
         city_np.setTexture(ts, detail_texture())
 
-        # per-material textures: horizontal classes are world-projected; wall/roof
-        # classes carry baked UVs from the mesh builder
+        # per-material textures + normal maps + surface response: horizontal classes
+        # are world-projected; wall/roof classes carry baked UVs from the mesh builder
         projected = {"asphalt", "concrete", "grass", "sand"}
         for mat, nodes in game.city.mat_nodes.items():
             fn = _MAT_TEX_FNS.get(mat)
             if fn is None:
                 continue
             tex = fn()
+            ntex = normal_texture(mat)
             base = TextureStage("mat_" + mat)
             base.setMode(TextureStage.MModulate)
+            norm = TextureStage("nrm_" + mat)
+            norm.setMode(TextureStage.MNormal)
+            spec, shin = MAT_SURFACE.get(mat, (0.1, 8))
+            m = Material("m_" + mat)
+            m.setSpecular((spec, spec, spec, 1))
+            m.setShininess(shin)
             for np_ in nodes:
                 np_.setTexture(base, tex)
+                np_.setTexture(norm, ntex)
+                np_.setMaterial(m)
                 if mat in projected:
-                    np_.setTexGen(base, TexGenAttrib.MWorldPosition)
-                    np_.setTexScale(base, 1 / MAT_SCALE[mat], 1 / MAT_SCALE[mat])
+                    for st in (base, norm):
+                        np_.setTexGen(st, TexGenAttrib.MWorldPosition)
+                        np_.setTexScale(st, 1 / MAT_SCALE[mat], 1 / MAT_SCALE[mat])
 
-        # tower facades: three window-grid variants
+        # tower facades: three window-grid variants, glassy response + mullion relief
         variants = [facade_texture(seed=7), facade_texture(seed=15), facade_texture(seed=23)]
+        fnorm = normal_texture("facade", 128)
+        fstage = TextureStage("nrm_facade")
+        fstage.setMode(TextureStage.MNormal)
+        glass_m = Material("m_glass")
+        glass_m.setSpecular((0.9, 0.92, 0.95, 1))
+        glass_m.setShininess(90.0)
         for i, np_ in enumerate(game.city.facade_nps):
             np_.setTexture(variants[i % len(variants)])
+            np_.setTexture(fstage, fnorm)
+            np_.setMaterial(glass_m)
 
         # animated water: drifting layers + specular sun glint
         wnp = game.city.water_np

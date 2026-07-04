@@ -405,16 +405,16 @@ class City:
                     if major:
                         b.add_rect(L - 0.35, t, L - 0.12, t2, z, YELLOW)
                         b.add_rect(L + 0.12, t, L + 0.35, t2, z, YELLOW)
-                        b.add_rect(L - 3.6, t, L - 3.35, t2 - 3, z, WHITE_PAINT)
-                        b.add_rect(L + 3.35, t, L + 3.6, t2 - 3, z, WHITE_PAINT)
+                        b.add_rect(L - 3.72, t, L - 3.48, t2 - 3, z, WHITE_PAINT)
+                        b.add_rect(L + 3.48, t, L + 3.72, t2 - 3, z, WHITE_PAINT)
                     else:
                         b.add_rect(L - 0.12, t, L + 0.12, t2, z, YELLOW)
                 else:
                     if major:
                         b.add_rect(t, L - 0.35, t2, L - 0.12, z, YELLOW)
                         b.add_rect(t, L + 0.12, t2, L + 0.35, z, YELLOW)
-                        b.add_rect(t, L - 3.6, t2 - 3, L - 3.35, z, WHITE_PAINT)
-                        b.add_rect(t, L + 3.35, t2 - 3, L + 3.6, z, WHITE_PAINT)
+                        b.add_rect(t, L - 3.72, t2 - 3, L - 3.48, z, WHITE_PAINT)
+                        b.add_rect(t, L + 3.48, t2 - 3, L + 3.72, z, WHITE_PAINT)
                     else:
                         b.add_rect(t, L - 0.12, t2, L + 0.12, z, YELLOW)
             t = t2 + gap
@@ -1111,19 +1111,21 @@ class City:
                 self._tree(b, tx, ty, 0.1, rng, purple=rng.random() < 0.4)
 
     def _palm(self, b, x, y, z, rng, h=None):
-        h = h or rng.uniform(6.5, 11.0)
-        lean = rng.uniform(-0.06, 0.06)
-        segs = 4
+        # Washingtonia-scale skyline palms: tall, slim, small crown
+        h = h or rng.uniform(12.0, 20.0)
+        lean = rng.uniform(-0.05, 0.05)
+        segs = 5
         px = x
         for i in range(segs):
             px = x + lean * h * (i / segs) ** 1.5 * 3
-            b.add_box(px, y, z + h * i / segs, 0.42 - i * 0.06, 0.42 - i * 0.06,
+            b.add_box(px, y, z + h * i / segs, 0.38 - i * 0.05, 0.38 - i * 0.05,
                       h / segs + 0.1, (0.45, 0.36, 0.24))
         topx, topz = px + lean * h * 0.5, z + h
         green = rng.choice(PALM_GREEN)
+        fr = 2.2 + h * 0.09
         for k in range(6):
             a = k * math.tau / 6 + rng.uniform(-0.2, 0.2)
-            fx, fy = math.cos(a) * 3.4, math.sin(a) * 3.4
+            fx, fy = math.cos(a) * fr, math.sin(a) * fr
             b.add_tri((topx, y, topz + 0.4),
                       (topx + fx * 0.55 - fy * 0.16, y + fy * 0.55 + fx * 0.16, topz + 0.9),
                       (topx + fx, y + fy, topz - 0.7), green)
@@ -1131,7 +1133,7 @@ class City:
                       (topx + fx, y + fy, topz - 0.7),
                       (topx + fx * 0.55 + fy * 0.16, y + fy * 0.55 - fx * 0.16, topz + 0.9),
                       tuple(v * 0.85 for v in green))
-        self.add_collider(x - 0.35, x + 0.35, y - 0.35, y + 0.35, z, z + h * 0.8)
+        self.add_collider(x - 0.3, x + 0.3, y - 0.3, y + 0.3, z, z + h * 0.85)
 
     def _tree(self, b, x, y, z, rng, purple=False):
         h = rng.uniform(3.5, 5.5)
