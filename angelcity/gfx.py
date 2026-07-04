@@ -390,7 +390,8 @@ class Gfx:
         self._clouds()
         self._dynamic_lights()
 
-        # bloom + SSAO (graceful fallback if the driver can't do offscreen buffers)
+        # bloom + SSAO + filmic tonemap (graceful fallback if the driver can't
+        # do offscreen buffers)
         try:
             from direct.filter.CommonFilters import CommonFilters
             f = CommonFilters(game.win, game.cam)
@@ -399,9 +400,23 @@ class Gfx:
             if ok and quality == "high":
                 f.setAmbientOcclusion(numsamples=16, radius=0.028, amount=1.6,
                                       strength=0.014, falloff=0.000004)
+            # HDR + sRGB gives an ACES-ish filmic rolloff; graceful per-method fallback
+            for setter, args in (("setHighDynamicRange", ()),
+                                 ("setSrgbEncode", ()),
+                                 ("setExposureAdjust", (0.7,)),
+                                 ("setGammaAdjust", (1.05,))):
+                fn = getattr(f, setter, None)
+                if fn:
+                    try:
+                        fn(*args)
+                    except Exception:
+                        pass
             self.filters = f if ok else None
         except Exception:
             self.filters = None
+        # LA color grade is applied by the game's per-frame sky update via setColorScale
+        # on render; the grade LUT parameters live here
+        self.grade_tint = (1.02, 1.0, 0.97)   # gentle warm-shadow / cool-highlight base
 
     def _clouds(self):
         """Soft drifting cumulus billboards high over the basin."""
