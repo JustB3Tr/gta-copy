@@ -1,0 +1,60 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install system GL + Xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Run headless smoke test
+        run: xvfb-run -a python main.py --headless --no-audio --quality low --frames 60
+
+  executables:
+    needs: smoke-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: AngelCity-windows
+            flags: --onefile --windowed
+          - os: macos-latest
+            artifact: AngelCity-macos
+            flags: --onefile --windowed
+          - os: ubuntu-latest
+            artifact: AngelCity-linux
+            flags: --onefile
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install -r requirements.txt pyinstaller
+      - name: Drop x86_64-only optional panda3d module (arm64 mac)
+        if: runner.os == 'macOS'
+        run: >
+          python -c "import panda3d, glob, os;
+          [os.remove(f) for f in glob.glob(os.path.join(os.path.dirname(panda3d.__file__), 'rocket*'))]"
+      - name: Build executable
+        run: >
+          pyinstaller ${{ matrix.flags }} --name AngelCity
+          --exclude-module panda3d.rocket
+          --collect-all panda3d main.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*
